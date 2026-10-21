@@ -1,0 +1,17 @@
+{
+  "tasks": {
+    "dev": "deno run -A src/main.ts",
+    "test": "deno test -A tests/",
+    "icon": "deno run -A scripts/make-icon.ts",
+    "web": "deno run -A scripts/build-web.ts",
+    "build": "deno compile -A --no-terminal --icon assets/icon.ico --include web --include assets --output dist/PreprintRadar.exe src/main.ts"
+  },
+  "imports": {
+    "pdf-lib": "npm:pdf-lib@1.17.1",
+    "fast-xml-parser": "npm:fast-xml-parser@4.5.0",
+    "pngjs": "npm:pngjs@7.0.0"
+  },
+  "nodeModulesDir": "auto",
+  "fmt": { "lineWidth": 120 },
+  "lint": { "exclude": ["site/", "dist/", ".dev-data/"] }
+}

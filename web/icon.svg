@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- a vermilion seal (朱印) carved with 雷达 -->
+  <rect x="12" y="12" width="232" height="232" rx="30" fill="#ad3329"/>
+  <rect x="31" y="31" width="194" height="194" rx="14" fill="none" stroke="#fbf1e2" stroke-width="7"/>
+  <g font-family="KaiTi, 楷体, STKaiti, serif" font-size="86" fill="#fbf1e2" stroke="#fbf1e2" stroke-width="3.2"
+     stroke-linejoin="round" text-anchor="middle">
+    <text x="128" y="117">雷</text>
+    <text x="128" y="207">达</text>
+  </g>
+</svg>
