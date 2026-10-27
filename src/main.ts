@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { APP_ID, APP_NAME, ASSET_DIR, DATA_DIR, DEFAULT_PORT, DEFAULT_SETTINGS, VERSION } from "./config.ts";
 import * as db from "./db.ts";
 import { startExport } from "./exporter.ts";
+import { onBrief } from "./brief.ts";
 import { log } from "./log.ts";
 import { onRunFinished, type RunSummary } from "./recommend.ts";
 import { startScheduler } from "./scheduler.ts";
@@ -122,6 +123,12 @@ async function main() {
   log(`${APP_NAME} ${VERSION} on http://127.0.0.1:${port}/ (data: ${DATA_DIR})`);
 
   onRunFinished((s) => afterRun(s, port, icons.png));
+  onBrief((r) => {
+    if (!r.n || !db.getSettings().notify) return;
+    const title = `${APP_NAME}：今日简报`;
+    const body = `${r.n} 篇新推荐 · 已生成到导出文件夹`;
+    showToast(title, body, `http://127.0.0.1:${port}/#/exports`, icons.png).then((ok) => ok || queueBalloon(title, body));
+  });
   startScheduler();
   if (!flags.has("--no-tray")) startTray(port, icons.ico);
   if (!flags.has("--background") && !flags.has("--no-window")) {

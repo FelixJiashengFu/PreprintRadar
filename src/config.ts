@@ -33,6 +33,10 @@ export interface Settings extends ScheduleSettings {
   /** Where the browser saves files — scanned for ChemRxiv PDFs the app could not fetch itself */
   downloadsDir: string;
   autoExport: "off" | ExportMode;
+  /** Write one HTML brief a day into exportDir (see src/brief.ts) */
+  briefEnabled: boolean;
+  /** "HH:MM", local time */
+  briefTime: string;
   openBrowserForBlocked: boolean;
   notify: boolean;
   autostart: boolean;
@@ -51,6 +55,8 @@ export const DEFAULT_SETTINGS: Settings = {
   exportDir: join(HOME, "Documents", APP_ID),
   downloadsDir: join(HOME, "Downloads"),
   autoExport: "off",
+  briefEnabled: true,
+  briefTime: "08:40",
   openBrowserForBlocked: true,
   notify: true,
   autostart: false,
@@ -81,16 +87,20 @@ export function sanitizeSettings(input: Record<string, unknown>, base: Settings 
   oneOf("scheduleMode", ["interval", "daily"]);
   int("intervalValue", 1, 999);
   oneOf("intervalUnit", ["minutes", "hours", "days"]);
-  if (typeof input.dailyTime === "string") {
-    const m = input.dailyTime.match(/^(\d{1,2}):(\d{2})$/);
-    if (m && Number(m[1]) < 24 && Number(m[2]) < 60) s.dailyTime = `${m[1].padStart(2, "0")}:${m[2]}`;
-  }
+  const time = (k: "dailyTime" | "briefTime") => {
+    if (typeof input[k] !== "string") return;
+    const m = (input[k] as string).match(/^(\d{1,2}):(\d{2})$/);
+    if (m && Number(m[1]) < 24 && Number(m[2]) < 60) s[k] = `${m[1].padStart(2, "0")}:${m[2]}`;
+  };
+  time("dailyTime");
   int("lookbackDays", 1, 30);
   int("maxPerRun", 1, 200);
   int("minScore", 0, 100);
   path("exportDir");
   path("downloadsDir");
   oneOf("autoExport", ["off", "merged", "separate", "digest"]);
+  bool("briefEnabled");
+  time("briefTime");
   bool("openBrowserForBlocked");
   bool("notify");
   bool("autostart");

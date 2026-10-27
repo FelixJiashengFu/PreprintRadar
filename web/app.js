@@ -104,7 +104,7 @@ const UNIT = { minutes: "分钟", hours: "小时", days: "天" };
 const scheduleText = (s) =>
   !s.scheduleEnabled ? "已暂停" : s.scheduleMode === "daily" ? `每天 ${s.dailyTime}` : `每 ${s.intervalValue} ${UNIT[s.intervalUnit]}`;
 const TRIGGER = { schedule: "自动推荐", manual: "手动推荐", tray: "从托盘推荐" };
-const MODE = { merged: "合并PDF", separate: "逐篇PDF", digest: "摘要清单" };
+const MODE = { merged: "合并PDF", separate: "逐篇PDF", digest: "摘要清单", brief: "每日简报" };
 
 // preprint servers come from the backend (src/sources/registry.ts)
 const sources = () => state.app?.sources ?? [];
@@ -1043,7 +1043,7 @@ async function renderExports() {
   const rows = await api("/api/exports");
   const dir = state.app.settings.exportDir;
   main.innerHTML = `<div class="page"><div class="page-head"><div><h1>导出记录</h1>
-    <div class="sub">PDF 保存在 <span class="path">${esc(dir)}</span></div></div>
+    <div class="sub">导出文件与简报保存在 <span class="path">${esc(dir)}</span></div></div>
     <div class="tools"><button class="btn" data-act="open-dir">${I("folder")}打开导出文件夹</button></div></div>
     <div class="rows">${
     rows.map((r) =>
@@ -1093,8 +1093,47 @@ function renderSettings() {
   const field = (title, help, ctl) =>
     `<div class="field"><div><b>${title}</b>${help ? `<small>${help}</small>` : ""}</div><div class="ctl">${ctl}</div></div>`;
   const link = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${text}</a>`;
+  // 每日简报: "next at" as a sentence
+  const briefNext = !a.brief
+    ? "—"
+    : a.brief.running
+    ? "正在生成…"
+    : a.brief.nextAt === null
+    ? "已关闭"
+    : a.brief.nextAt === 0
+    ? "马上生成（今天的还没写）"
+    : `${fmtWhen(a.brief.nextAt)}（${fmtIn(a.brief.nextAt)}）`;
+  const briefLast = a.brief?.last;
 
   const desktopOnly = WEB ? "" : `
+  <div class="section"><h2>每日简报</h2>
+    ${
+    field(
+      "每天生成一份",
+      "把上一次简报之后的新推荐整理成一页 HTML，存进导出文件夹；用浏览器打开后按 Ctrl+P 就能存成 PDF",
+      sw("s-brief", s.briefEnabled !== false),
+    )
+  }
+    ${
+    field(
+      "生成时间",
+      "到点就生成；电脑关机的时候会开机后补上，不会漏",
+      `<input type="time" id="s-brieftime" value="${esc(s.briefTime || "08:40")}">` +
+        `<button class="btn small" data-act="brief-now">${I("file")}现在生成一份</button>`,
+    )
+  }
+    ${field("下一份", "", `<span id="s-brief-next">${briefNext}</span>`)}
+    ${
+    briefLast
+      ? field(
+        "上一份",
+        `${fmtWhen(Date.parse(briefLast.at))} · ${briefLast.n} 篇`,
+        `<span class="path" title="${esc(briefLast.path)}">${esc(briefLast.path)}</span>` +
+          `<button class="btn small" data-act="open-brief" data-path="${esc(briefLast.path)}">打开</button>`,
+      )
+      : ""
+  }
+  </div>
   <div class="section"><h2>PDF 导出</h2>
     ${
     field(
@@ -1202,6 +1241,14 @@ function renderSettings() {
   renderNext();
   state.handlers = {
     "run-now": runNow,
+    "brief-now": async () => {
+      toast("正在整理简报…");
+      const r = await api("/api/brief", { method: "POST" });
+      if (r.brief) state.app.brief = r.brief;
+      toast(r.message, !r.ok);
+      renderSettings();
+    },
+    "open-brief": (el) => api("/api/open", { method: "POST", body: { kind: "path", target: el.dataset.path } }),
     "open-dir": () => api("/api/open", { method: "POST", body: { kind: "path", target: $("#s-export").value } }),
     "open-data": () => api("/api/open", { method: "POST", body: { kind: "path", target: a.dataDir } }),
     pick: async (el) => {
@@ -1232,6 +1279,8 @@ function renderSettings() {
           exportDir: $("#s-export").value,
           downloadsDir: $("#s-dl").value,
           autoExport: $("#s-auto").value,
+          briefEnabled: $("#s-brief").checked,
+          briefTime: $("#s-brieftime").value,
           openBrowserForBlocked: $("#s-openbrowser").checked,
           autostart: $("#s-autostart").checked,
           uiBrowser: $("#s-browser").value,

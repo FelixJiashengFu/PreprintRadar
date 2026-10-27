@@ -2,6 +2,7 @@ import { extname, isAbsolute, join, normalize, relative } from "node:path";
 import { APP_ID, APP_NAME, ASSET_DIR, DATA_DIR, sanitizeSettings, VERSION, WEB_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import { type Extra, paperDto } from "./dto.ts";
+import { briefInfo, generateBrief } from "./brief.ts";
 import { cachedPdf, getJob, type Job, MODE_LABEL, recentJobs, skipWait, startExport, storePdf } from "./exporter.ts";
 import { log, LOG_PATH } from "./log.ts";
 import { describe, parseQuery, QueryError, toArxiv } from "./query.ts";
@@ -144,6 +145,7 @@ function appState() {
     unread: db.unreadCount(),
     topics: db.listTopics().map((t) => ({ id: t.id, name: t.name, enabled: t.enabled })),
     jobs: recentJobs().map(jobDto),
+    brief: briefInfo(),
     browsers: { edge: !!findBrowser("edge"), chrome: !!findBrowser("chrome") },
   };
 }
@@ -354,6 +356,13 @@ async function api(req: Request, url: URL, ctx: ServerCtx): Promise<Response> {
     if (!p) return fail("文章不存在", 404);
     storePdf(p, new Uint8Array(await req.arrayBuffer()));
     return json({ ok: true });
+  }
+
+  // daily brief
+  if (m === "POST" && path === "/api/brief") {
+    const r = await generateBrief("manual");
+    tick();
+    return json({ ...r, brief: briefInfo() });
   }
 
   // desktop integration

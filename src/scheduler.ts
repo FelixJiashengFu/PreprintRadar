@@ -1,4 +1,5 @@
 import * as db from "./db.ts";
+import { briefRetryAt, generateBrief, isBriefRunning, nextBriefAt } from "./brief.ts";
 import { log } from "./log.ts";
 import { isRunning, runRecommendation } from "./recommend.ts";
 import { computeNextRun } from "./schedule.ts";
@@ -6,8 +7,10 @@ import { computeNextRun } from "./schedule.ts";
 const appStart = Date.now();
 const GRACE_MS = 20_000;
 let nextRunAt: number | null = null;
+let nextBrief: number | null = null;
 
 export const getNextRunAt = () => nextRunAt;
+export const getNextBriefAt = () => nextBrief;
 
 let soonTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -31,6 +34,15 @@ export function tick() {
     log("scheduled run due");
     runRecommendation("schedule").finally(tick);
   }
+  tickBrief();
+}
+
+/** The daily brief: due when today's HH:MM has passed and today has no brief yet. */
+function tickBrief() {
+  nextBrief = nextBriefAt();
+  if (nextBrief !== 0 || isBriefRunning() || Date.now() < briefRetryAt()) return;
+  log("daily brief due");
+  generateBrief("auto").finally(tick);
 }
 
 export function startScheduler() {

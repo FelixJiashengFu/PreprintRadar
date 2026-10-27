@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { dirname } from "node:path";
 import { DB_PATH, DEFAULT_SETTINGS, sanitizeSettings, type Settings } from "./config.ts";
 import type { Mark, RecInfo } from "./dto.ts";
-import type { ExportMode, Paper, Source, Topic } from "./types.ts";
+import type { ExportKind, Paper, Source, Topic } from "./types.ts";
 
 export type { Mark, RecInfo } from "./dto.ts";
 
@@ -278,6 +278,31 @@ export function recInfo(uids: string[]): Map<string, RecInfo> {
   return out;
 }
 
+export interface BriefRec {
+  paper: Paper;
+  score: number;
+  matched: string[];
+  topicIds: number[];
+  createdAt: string;
+}
+
+/** Recommendations created in [fromIso, toIso), best first — the corpus of a daily brief. */
+export function recsBetween(fromIso: string, toIso: string): BriefRec[] {
+  const rows = db.prepare(
+    `SELECT papers.*, recs.score AS r_score, recs.matched AS r_matched, recs.topic_ids AS r_topics
+       FROM recs JOIN papers ON papers.uid = recs.uid
+      WHERE recs.created_at >= ? AND recs.created_at < ?
+      ORDER BY recs.score DESC`,
+  ).all(fromIso, toIso) as Row[];
+  return rows.map((r) => ({
+    paper: rowToPaper(r),
+    score: Number(r.r_score ?? 0),
+    matched: json<string[]>(r.r_matched, []),
+    topicIds: json<number[]>(r.r_topics, []),
+    createdAt: String(r.created_at),
+  }));
+}
+
 /** Runs that produced recommendations, newest first, each with its papers (best first). */
 export function feed(opts: { limit: number; offset: number; topicId?: number; unreadOnly?: boolean }) {
   const conds = ["1 = 1"];
@@ -357,7 +382,7 @@ export function starredUids(): string[] {
 export interface ExportRow {
   id: number;
   createdAt: string;
-  mode: ExportMode;
+  mode: ExportKind;
   title: string;
   n: number;
   nMissing: number;

@@ -311,7 +311,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 @keyframes drop { from { transform: translateY(-8px); opacity: 0; } }
 
 /* ---------- exports list ---------- */
-.rows { display: grid; gap: 10px; }
+.rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .rowitem { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 18px; display: flex; gap: 14px; align-items: center; box-shadow: var(--shadow); }
 .rowitem > .i { color: var(--accent); }
 .rowitem .grow { flex: 1; min-width: 0; }

@@ -46,3 +46,5 @@ export interface Topic {
 }
 
 export type ExportMode = "merged" | "separate" | "digest";
+/** Everything that lands in the export folder and shows up in 导出记录 — the three PDF modes plus the daily brief. */
+export type ExportKind = ExportMode | "brief";
