@@ -10,7 +10,26 @@ export type Source =
   | "eartharxiv"
   | "essoar"
   | "authorea"
-  | "engrxiv";
+  | "engrxiv"
+  | "ecsarxiv"
+  | "osf"
+  | "qeios"
+  | "scielo"
+  | "engage"
+  | "socarxiv"
+  | "psyarxiv"
+  | "edarxiv"
+  | "metaarxiv"
+  | "mediarxiv"
+  | "kcworks"
+  | "jmir"
+  | "sportrxiv"
+  | "ecoevorxiv"
+  | "agrirxiv"
+  | "paleorxiv";
+
+/** Sources read from DataCite instead of Crossref (src/sources/repository.ts). */
+export type RepoSource = "kcworks";
 
 export interface Paper {
   /** "arxiv:2610.28529" or "chemrxiv:15010774" — version-independent */

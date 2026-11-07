@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { parseQuery } from "../src/query.ts";
 import { crossrefToPaper, DEFS, isMedrxivDoi, parseChemrxivDoi } from "../src/sources/crossref.ts";
 import { dataciteToPaper, toDatacite } from "../src/sources/datacite.ts";
+import { repoToPaper } from "../src/sources/repository.ts";
 import { htmlishToText } from "../src/text.ts";
 
 const item = (DOI: string, extra: Record<string, unknown> = {}) => ({
@@ -92,4 +93,63 @@ Deno.test("DataCite arXiv records become papers", () => {
   assert.deepEqual(p.categories, ["physics.chem-ph"]);
   assert.equal(p.title, "Constraints on Transients");
   assert.equal(p.pdfUrl, "https://arxiv.org/pdf/2610.28633");
+});
+
+Deno.test("servers added for every discipline: ids, versions, and records under shared prefixes", () => {
+  const cases: [keyof typeof DEFS, string, string, number][] = [
+    ["socarxiv", "10.31235/osf.io/ur5y3_v1", "socarxiv:ur5y3", 1],
+    ["psyarxiv", "10.31234/osf.io/j5x7g_v3", "psyarxiv:j5x7g", 3],
+    ["edarxiv", "10.35542/osf.io/ta4nv", "edarxiv:ta4nv", 1],
+    ["osf", "10.31219/osf.io/wzqxg_v5", "osf:wzqxg", 5],
+    ["ecsarxiv", "10.1149/osf.io/pjdgm_v1", "ecsarxiv:pjdgm", 1],
+    ["qeios", "10.32388/ozjpoz.3", "qeios:ozjpoz", 3],
+    ["qeios", "10.32388/l7ntkx", "qeios:l7ntkx", 1],
+    ["scielo", "10.1590/SciELOPreprints.18786", "scielo:18786", 1],
+    ["engage", "10.33774/apsa-2026-t5x44-v2", "engage:apsa-2026-t5x44", 2],
+    ["engage", "10.33774/coe-2026-gbr4v", "engage:coe-2026-gbr4v", 1],
+    ["jmir", "10.2196/preprints.116322", "jmir:116322", 1],
+    ["sportrxiv", "10.51224/sportrxiv.1158", "sportrxiv:1158", 1],
+    ["ecoevorxiv", "10.32942/x22h6p", "ecoevorxiv:x22h6p", 1],
+    ["agrirxiv", "10.31220/agrirxiv.2026.00519", "agrirxiv:2026.00519", 1],
+  ];
+  for (const [src, doi, uid, version] of cases) {
+    const p = crossrefToPaper(src, item(doi))!;
+    assert.ok(p, `${src} ${doi}`);
+    assert.equal(p.uid, uid, doi);
+    assert.equal(p.version, version, doi);
+  }
+  assert.equal(crossrefToPaper("osf", item("10.31219/osf.io/wzqxg_v5"))!.pdfUrl, "https://osf.io/wzqxg/download");
+  assert.equal(crossrefToPaper("jmir", item("10.2196/preprints.116322"))!.pdfUrl, "https://preprints.jmir.org/preprint/116322");
+  // journal articles that share a prefix with a preprint server are not preprints
+  assert.equal(crossrefToPaper("scielo", item("10.1590/s0100-879x2026e14321")), null);
+  assert.equal(crossrefToPaper("jmir", item("10.2196/71234")), null);
+  assert.equal(crossrefToPaper("ecsarxiv", item("10.1149/1945-7111/ad1234")), null);
+});
+
+Deno.test("Knowledge Commons (DataCite): texts kept with their subjects, datasets and images left out, duplicates folded", () => {
+  const rec = (doi: string, type: string, title = "Reading Woolf's Diaries", extra: Record<string, unknown> = {}) => ({
+    id: doi,
+    attributes: {
+      doi,
+      titles: [{ title }],
+      creators: [{ name: "Smith, Jane" }],
+      descriptions: [{ descriptionType: "Abstract", description: "An essay on the late diaries." }],
+      subjects: [{ subject: "Literature--Philosophy" }, { subject: "Modernism" }],
+      types: { resourceTypeGeneral: type },
+      url: `https://works.hcommons.org/doi/${doi}`,
+      created: "2026-11-02T10:00:00Z",
+      ...extra,
+    },
+  });
+  const p = repoToPaper("kcworks", rec("10.17613/38bf8-my497", "Preprint"))!;
+  assert.equal(p.uid, "kcworks:38bf8-my497");
+  assert.deepEqual(p.authors, ["Jane Smith"]);
+  assert.deepEqual(p.categories, ["Literature--Philosophy", "Modernism"]);
+  assert.equal(p.abstract, "An essay on the late diaries.");
+  assert.equal(p.url, "https://works.hcommons.org/doi/10.17613/38bf8-my497");
+  assert.ok(repoToPaper("kcworks", rec("10.17613/aaaaa-11111", "JournalArticle")));
+  assert.ok(repoToPaper("kcworks", rec("10.17613/aaaaa-22222", "BookChapter")));
+  assert.equal(repoToPaper("kcworks", rec("10.17613/aaaaa-33333", "Dataset")), null);
+  assert.equal(repoToPaper("kcworks", rec("10.17613/aaaaa-44444", "Image")), null);
+  assert.equal(repoToPaper("kcworks", rec("10.5281/zenodo.1", "Preprint")), null, "another prefix");
 });

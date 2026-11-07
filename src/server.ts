@@ -22,7 +22,7 @@ import {
   showToast,
 } from "./system.ts";
 import { DOWNLOAD_URL, REPO_URL, WEB_URL } from "./meta.ts";
-import { DEFAULT_SOURCES, isSource, SOURCES } from "./sources/registry.ts";
+import { DEFAULT_SOURCES, isSource, SOURCE_GROUPS, SOURCES } from "./sources/registry.ts";
 import { takeBalloons } from "./tray.ts";
 import type { ExportMode, Paper, Topic } from "./types.ts";
 
@@ -133,6 +133,7 @@ function appState() {
     version: VERSION,
     web: false,
     sources: SOURCES,
+    sourceGroups: SOURCE_GROUPS,
     links: { repo: REPO_URL, web: WEB_URL, download: DOWNLOAD_URL },
     dataDir: DATA_DIR,
     logPath: LOG_PATH,

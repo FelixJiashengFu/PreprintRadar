@@ -97,12 +97,20 @@ function fmtIn(ts) {
   if (m <= 1) return "马上开始";
   if (m < 60) return `${m} 分钟后`;
   const h = Math.floor(m / 60);
-  if (h < 48) return `${h} 小时${m % 60 ? ` ${m % 60} 分` : ""}后`;
+  if (h < 48) return m % 60 ? `${h} 小时 ${m % 60} 分钟后` : `${h} 小时后`;
   return `${Math.round(h / 24)} 天后`;
 }
 const UNIT = { minutes: "分钟", hours: "小时", days: "天" };
 const scheduleText = (s) =>
-  !s.scheduleEnabled ? "已暂停" : s.scheduleMode === "daily" ? `每天 ${s.dailyTime}` : `每 ${s.intervalValue} ${UNIT[s.intervalUnit]}`;
+  !s.scheduleEnabled
+    ? "已暂停"
+    : s.scheduleMode === "daily"
+    ? `每天 ${s.dailyTime}`
+    : s.intervalUnit === "minutes"
+    ? `每 ${s.intervalValue} 分钟`
+    : s.intervalUnit === "days"
+    ? `每 ${s.intervalValue} 天`
+    : `每 ${s.intervalValue} 小时`;
 const TRIGGER = { schedule: "自动推荐", manual: "手动推荐", tray: "从托盘推荐" };
 const MODE = { merged: "合并PDF", separate: "逐篇PDF", digest: "摘要清单", brief: "每日简报" };
 
@@ -110,6 +118,7 @@ const MODE = { merged: "合并PDF", separate: "逐篇PDF", digest: "摘要清单
 const sources = () => state.app?.sources ?? [];
 const srcName = (id) => sources().find((s) => s.id === id)?.name ?? id;
 const defaultSources = () => sources().filter((s) => s.default).map((s) => s.id);
+const sourceGroups = () => state.app?.sourceGroups ?? [["multi", "综合"]];
 
 function ensureSourceStyles() {
   if ($("#src-colors") || !sources().length) return;
@@ -120,15 +129,21 @@ function ensureSourceStyles() {
   document.head.append(el);
 }
 
-/** Toggleable chips for choosing preprint servers; `id` names the container. */
+/** Toggleable chips for choosing preprint servers, one row per discipline; `id` names the container. */
 function sourceChips(id, selected) {
-  return `<div class="chips" id="${id}">${
-    sources().map((s) =>
-      `<span class="chip src-chip${selected.includes(s.id) ? " on" : ""}" data-src="${s.id}" title="${esc(s.field)}${
-        s.pdf === "browser" ? "（PDF 需在浏览器中下载）" : ""
-      }">${esc(s.name)}</span>`
-    ).join("")
-  }<span class="chip ghost-chip" data-src-preset="default" title="arXiv、ChemRxiv、bioRxiv 等常用来源">常用</span><span class="chip ghost-chip" data-src-preset="all">全部</span></div>`;
+  const chip = (s) =>
+    `<span class="chip src-chip${selected.includes(s.id) ? " on" : ""}" data-src="${s.id}" title="${esc(s.field)}${
+      s.pdf === "browser" ? "（PDF 需在浏览器中下载）" : ""
+    }">${esc(s.name)}</span>`;
+  const rows = sourceGroups()
+    .map(([g, label]) => [g, label, sources().filter((s) => (s.group ?? "multi") === g)])
+    .filter(([, , list]) => list.length)
+    .map(([g, label, list]) =>
+      `<div class="src-group"><button type="button" class="src-group-name" data-src-group="${g}" title="全选或取消这一组">${label}</button><div class="chips">${
+        list.map(chip).join("")
+      }</div></div>`
+    );
+  return `<div class="src-groups" id="${id}">${rows.join("")}<div class="chips src-presets"><span class="chip ghost-chip" data-src-preset="default" title="arXiv、ChemRxiv、bioRxiv 等常用来源">常用</span><span class="chip ghost-chip" data-src-preset="all">全部</span><span class="chip ghost-chip" data-src-preset="none">清空</span></div></div>`;
 }
 
 function chipClick(e) {
@@ -137,10 +152,18 @@ function chipClick(e) {
     chip.classList.toggle("on");
     return true;
   }
+  const group = e.target.closest("[data-src-group]");
+  if (group) {
+    const chips = $$("[data-src]", group.parentElement);
+    const on = !chips.every((c) => c.classList.contains("on"));
+    for (const c of chips) c.classList.toggle("on", on);
+    return true;
+  }
   const preset = e.target.closest("[data-src-preset]");
   if (!preset) return false;
-  const want = preset.dataset.srcPreset === "all" ? sources().map((s) => s.id) : defaultSources();
-  for (const c of $$("[data-src]", preset.parentElement)) c.classList.toggle("on", want.includes(c.dataset.src));
+  const p = preset.dataset.srcPreset;
+  const want = p === "all" ? sources().map((s) => s.id) : p === "none" ? [] : defaultSources();
+  for (const c of $$("[data-src]", preset.closest(".src-groups") ?? preset.parentElement)) c.classList.toggle("on", want.includes(c.dataset.src));
   return true;
 }
 const chosenSources = (id) => $$(`#${id} .chip.on[data-src]`).map((c) => c.dataset.src);
@@ -174,6 +197,66 @@ const ARXIV_CATS = [
   ["physics.atom-ph", "原子分子物理"],
   ["physics.app-ph", "应用物理"],
 ];
+
+/** Every arXiv category (cross-listed aliases such as math.IT = cs.IT left out), by archive. */
+const ARXIV_ALL = [
+  ["物理", [
+    ["astro-ph.CO", "宇宙学与非星系天体物理"], ["astro-ph.EP", "地球与行星天体物理"], ["astro-ph.GA", "星系天体物理"],
+    ["astro-ph.HE", "高能天体物理"], ["astro-ph.IM", "天体物理仪器与方法"], ["astro-ph.SR", "太阳与恒星天体物理"],
+    ["cond-mat.dis-nn", "无序系统与神经网络"], ["cond-mat.mes-hall", "介观与纳米尺度物理"], ["cond-mat.mtrl-sci", "材料科学"],
+    ["cond-mat.other", "其他凝聚态物理"], ["cond-mat.quant-gas", "量子气体"], ["cond-mat.soft", "软物质"],
+    ["cond-mat.stat-mech", "统计力学"], ["cond-mat.str-el", "强关联电子"], ["cond-mat.supr-con", "超导"],
+    ["gr-qc", "广义相对论与量子宇宙学"], ["hep-ex", "高能物理实验"], ["hep-lat", "格点场论"], ["hep-ph", "高能物理唯象"],
+    ["hep-th", "高能物理理论"], ["math-ph", "数学物理"], ["nlin.AO", "适应与自组织系统"], ["nlin.CG", "元胞自动机与格气"],
+    ["nlin.CD", "混沌动力学"], ["nlin.SI", "可积系统"], ["nlin.PS", "斑图与孤子"], ["nucl-ex", "核物理实验"], ["nucl-th", "核物理理论"],
+    ["physics.acc-ph", "加速器物理"], ["physics.ao-ph", "大气与海洋物理"], ["physics.app-ph", "应用物理"],
+    ["physics.atm-clus", "原子与分子团簇"], ["physics.atom-ph", "原子物理"], ["physics.bio-ph", "生物物理"],
+    ["physics.chem-ph", "化学物理"], ["physics.class-ph", "经典物理"], ["physics.comp-ph", "计算物理"],
+    ["physics.data-an", "数据分析、统计与概率"], ["physics.ed-ph", "物理教育"], ["physics.flu-dyn", "流体力学"],
+    ["physics.gen-ph", "普通物理"], ["physics.geo-ph", "地球物理"], ["physics.hist-ph", "物理学史与物理哲学"],
+    ["physics.ins-det", "仪器与探测器"], ["physics.med-ph", "医学物理"], ["physics.optics", "光学"],
+    ["physics.plasm-ph", "等离子体物理"], ["physics.pop-ph", "大众物理"], ["physics.soc-ph", "物理与社会"],
+    ["physics.space-ph", "空间物理"], ["quant-ph", "量子物理"],
+  ]],
+  ["数学", [
+    ["math.AC", "交换代数"], ["math.AG", "代数几何"], ["math.AP", "偏微分方程分析"], ["math.AT", "代数拓扑"],
+    ["math.CA", "经典分析与常微分方程"], ["math.CO", "组合数学"], ["math.CT", "范畴论"], ["math.CV", "复变函数"],
+    ["math.DG", "微分几何"], ["math.DS", "动力系统"], ["math.FA", "泛函分析"], ["math.GM", "一般数学"],
+    ["math.GN", "一般拓扑"], ["math.GR", "群论"], ["math.GT", "几何拓扑"], ["math.HO", "数学史与综述"],
+    ["math.KT", "K 理论与同调"], ["math.LO", "数理逻辑"], ["math.MG", "度量几何"], ["math.NA", "数值分析"],
+    ["math.NT", "数论"], ["math.OA", "算子代数"], ["math.OC", "优化与控制"], ["math.PR", "概率论"],
+    ["math.QA", "量子代数"], ["math.RA", "环与代数"], ["math.RT", "表示论"], ["math.SG", "辛几何"],
+    ["math.SP", "谱理论"], ["math.ST", "统计理论"],
+  ]],
+  ["计算机科学", [
+    ["cs.AI", "人工智能"], ["cs.AR", "硬件体系结构"], ["cs.CC", "计算复杂性"], ["cs.CE", "计算工程、金融与科学"],
+    ["cs.CG", "计算几何"], ["cs.CL", "计算与语言"], ["cs.CR", "密码学与安全"], ["cs.CV", "计算机视觉与模式识别"],
+    ["cs.CY", "计算机与社会"], ["cs.DB", "数据库"], ["cs.DC", "分布式、并行与集群计算"], ["cs.DL", "数字图书馆"],
+    ["cs.DM", "离散数学"], ["cs.DS", "数据结构与算法"], ["cs.ET", "新兴技术"], ["cs.FL", "形式语言与自动机"],
+    ["cs.GL", "一般文献"], ["cs.GR", "图形学"], ["cs.GT", "计算机科学与博弈论"], ["cs.HC", "人机交互"],
+    ["cs.IR", "信息检索"], ["cs.IT", "信息论"], ["cs.LG", "机器学习"], ["cs.LO", "计算机科学中的逻辑"],
+    ["cs.MA", "多智能体系统"], ["cs.MM", "多媒体"], ["cs.MS", "数学软件"], ["cs.NE", "神经与进化计算"],
+    ["cs.NI", "网络与互联网体系结构"], ["cs.OH", "其他计算机科学"], ["cs.OS", "操作系统"], ["cs.PF", "性能"],
+    ["cs.PL", "程序设计语言"], ["cs.RO", "机器人学"], ["cs.SC", "符号计算"], ["cs.SD", "声音"],
+    ["cs.SE", "软件工程"], ["cs.SI", "社会与信息网络"],
+  ]],
+  ["定量生物学", [
+    ["q-bio.BM", "生物分子"], ["q-bio.CB", "细胞行为"], ["q-bio.GN", "基因组学"], ["q-bio.MN", "分子网络"],
+    ["q-bio.NC", "神经元与认知"], ["q-bio.OT", "其他定量生物学"], ["q-bio.PE", "种群与演化"], ["q-bio.QM", "定量方法"],
+    ["q-bio.SC", "亚细胞过程"], ["q-bio.TO", "组织与器官"],
+  ]],
+  ["定量金融", [
+    ["q-fin.CP", "计算金融"], ["q-fin.GN", "一般金融"], ["q-fin.MF", "数理金融"], ["q-fin.PM", "投资组合管理"],
+    ["q-fin.PR", "证券定价"], ["q-fin.RM", "风险管理"], ["q-fin.ST", "金融统计"], ["q-fin.TR", "交易与市场微观结构"],
+  ]],
+  ["统计学", [
+    ["stat.AP", "应用统计"], ["stat.CO", "统计计算"], ["stat.ME", "统计方法"], ["stat.ML", "统计机器学习"],
+    ["stat.OT", "其他统计"], ["stat.TH", "统计理论"],
+  ]],
+  ["电子工程与系统科学", [["eess.AS", "音频与语音处理"], ["eess.IV", "图像与视频处理"], ["eess.SP", "信号处理"], ["eess.SY", "系统与控制"]]],
+  ["经济学", [["econ.EM", "计量经济学"], ["econ.GN", "一般经济学"], ["econ.TH", "理论经济学"]]],
+];
+const ARXIV_NAME = new Map(ARXIV_ALL.flatMap(([, list]) => list));
 
 const TEMPLATES = [
   {
@@ -217,6 +300,13 @@ const TEMPLATES = [
       '"drug discovery", "chemical biology", "medicinal chemistry", "covalent inhibitor*", PROTAC*, "fragment-based", "binding affinity"',
     sources: ["biorxiv", "chemrxiv", "researchsquare", "medrxiv"],
     arxivCats: [],
+  },
+  {
+    name: "文学与数字人文",
+    query:
+      '"digital humanities", "literary criticism", "comparative literature", "world literature", "literary theory", "literary history", "distant reading", poetry, fiction',
+    sources: ["kcworks", "ssrn", "osf", "preprints", "mediarxiv", "qeios", "arxiv"],
+    arxivCats: ["cs.CL", "cs.DL"],
   },
 ];
 
@@ -292,7 +382,7 @@ function renderSide() {
   else if (!s.scheduleEnabled) line = `<div class="row"><span class="dot"></span>自动推荐已暂停</div>`;
   else if (!a.topics.some((t) => t.enabled)) line = `<div class="row"><span class="dot"></span>等待添加兴趣主题</div>`;
   else {
-    line = `<div class="row"><span class="dot on"></span>自动推荐 · ${scheduleText(s)}</div>` +
+    line = `<div class="row"><span class="dot on"></span><span>自动推荐</span> · <span>${scheduleText(s)}</span></div>` +
       (a.nextRunAt ? `<div>下次：${fmtWhen(a.nextRunAt)}</div>` : "");
   }
   $("#side-foot").innerHTML = line + (WEB
@@ -646,16 +736,16 @@ function renderStrip() {
   const s = a.settings;
   const last = a.lastRun;
   const lastTxt = last
-    ? `上次 ${fmtWhen(Date.parse(last.startedAt))}：${
+    ? `<span>上次推荐：${fmtWhen(Date.parse(last.startedAt))}</span> · <span>${
       last.status === "error" ? `失败（${esc(last.error || "")}）` : `新增 ${last.nNew} 篇`
-    }`
-    : "还没有推荐过";
+    }</span>`
+    : "<span>还没有推荐过</span>";
   const next = !s.scheduleEnabled
     ? `<span class="big">自动推荐已暂停</span>`
     : a.nextRunAt
-    ? `<span class="big">下次自动推荐：${fmtWhen(a.nextRunAt)}</span> <span class="muted">（${fmtIn(a.nextRunAt)} · ${scheduleText(s)}）</span>`
+    ? `<span class="big">下次自动推荐：${fmtWhen(a.nextRunAt)}</span> <span class="muted"><span>${fmtIn(a.nextRunAt)}</span> · <span>${scheduleText(s)}</span></span>`
     : `<span class="big">先启用一个兴趣主题</span>`;
-  el.innerHTML = `<div class="strip">${I("bell")}<div class="grow">${next}<div class="muted">${lastTxt}${WEB ? " · 网页版只在本页开着时推荐，关掉后再打开会自动补上" : ""}</div></div>` +
+  el.innerHTML = `<div class="strip">${I("bell")}<div class="grow">${next}<div class="muted">${lastTxt}${WEB ? " · <span>网页版只在本页开着时推荐，关掉后再打开会自动补上</span>" : ""}</div></div>` +
     `<a class="btn small ghost" href="#/settings">${I("sliders")}修改频率</a></div>` +
     (last?.notes?.length && last.status !== "error"
       ? `<div class="notes">${last.notes.map((n) => `<div>${esc(n)}</div>`).join("")}</div>`
@@ -675,7 +765,7 @@ function batchHtml({ run, papers }) {
   state.batches.set(run.id, papers.map((p) => p.uid));
   const unread = papers.filter((p) => !p.read).length;
   return `<section class="batch"><div class="batch-head"><h2>${fmtWhen(Date.parse(run.startedAt))}</h2>` +
-    `<span class="muted">${TRIGGER[run.trigger] ?? ""} · ${papers.length} 篇${unread ? ` · ${unread} 篇未读` : ""}</span>` +
+    `<span class="muted"><span>${TRIGGER[run.trigger] ?? ""}</span> · <span>共 ${papers.length} 篇</span>${unread ? ` · <span>${unread} 篇未读</span>` : ""}</span>` +
     `<div class="tools"><button class="btn small ghost" data-act="batch-select" data-run="${run.id}">全选本批</button>` +
     `<div class="menu-wrap split"><button class="btn small" data-act="batch-export" data-run="${run.id}" title="目录 + 全文，带书签">` +
     `${I("download")}导出本批PDF</button><button class="btn small" data-act="batch-menu" data-run="${run.id}">${I("chev")}</button></div>` +
@@ -716,7 +806,7 @@ const batchTitle = (runId) => {
 
 async function renderFeed() {
   main.innerHTML = `<div class="page"><div class="page-head"><div><h1>推荐</h1>
-    <div class="sub">按你的兴趣主题，从 arXiv、ChemRxiv、bioRxiv 等 12 个预印本平台自动挑选的新文章</div></div>
+    <div class="sub">按你的兴趣主题，从 arXiv、ChemRxiv、bioRxiv 等 28 个预印本平台与开放仓库（理工、医学、社科到人文）自动挑选的新文章</div></div>
     <div class="tools"><button class="btn" data-act="read-all">${I("checks")}全部标为已读</button>
     <button class="btn primary" data-act="run-now">${I("refresh")}立即推荐</button></div></div>
     <div id="strip"></div><div id="topic-filter" class="chips"></div><div id="feed"></div><div class="more" id="feed-more"></div></div>`;
@@ -768,7 +858,7 @@ function renderSearch() {
   s.sources = (s.sources ?? rememberedSearchSources() ?? defaultSources()).filter((x) => known.has(x));
   const opt = (v, label, cur) => `<option value="${v}" ${String(cur) === v ? "selected" : ""}>${label}</option>`;
   main.innerHTML = `<div class="page"><div class="page-head"><div><h1>搜索</h1>
-    <div class="sub">实时检索 arXiv、ChemRxiv、bioRxiv 等 12 个预印本平台；勾选结果即可一键导出 PDF</div></div></div>
+    <div class="sub">实时检索 arXiv、ChemRxiv、bioRxiv 等 28 个预印本平台与开放仓库；勾选结果即可一键导出 PDF</div></div></div>
     <form class="searchbar" id="sform" autocomplete="off">
       <div class="row"><input type="text" id="sq" placeholder='例如："C-H activation" photoredox -review' value="${esc(s.q)}">
         <button class="btn primary" type="submit">${I("search")}搜索</button></div>
@@ -927,7 +1017,9 @@ async function renderTopics() {
 
 function openTopicEditor(t = null, preset = null, previewNow = false) {
   const v = t ?? preset ?? { name: "", query: "", sources: defaultSources(), arxivCats: [], enabled: true };
-  const known = new Set(ARXIV_CATS.map(([c]) => c));
+  const known = new Set([...ARXIV_CATS.map(([c]) => c), ...ARXIV_NAME.keys()]);
+  const catChip = ([c, n]) => `<span class="chip${v.arxivCats.includes(c) ? " on" : ""}" data-cat="${c}" title="${c}">${n}</span>`;
+  const allPicked = v.arxivCats.filter((c) => ARXIV_NAME.has(c) && !ARXIV_CATS.some(([x]) => x === c)).length;
   modal.innerHTML = `<div class="dialog"><header><h2>${t ? "编辑主题" : "新建兴趣主题"}</h2>
     <button class="btn ghost x" data-m="close">${I("x")}</button></header>
     <div class="body">
@@ -937,9 +1029,10 @@ function openTopicEditor(t = null, preset = null, previewNow = false) {
         <small id="tq-check">例：<code>"C-H activation", photoredox</code> 或 <code>("machine learning", "deep learning") catalys*</code></small></div>
       <div class="form-row"><label>来源 <small>（点选；arXiv 还可以按下面的分类订阅）</small></label>${sourceChips("tsrc", v.sources)}</div>
       <div class="form-row"><label>arXiv 分类 <small>（可选；不选 = 在全部分类里按关键词找）</small></label>
-        <div class="chips" id="tcats">${
-    ARXIV_CATS.map(([c, n]) => `<span class="chip${v.arxivCats.includes(c) ? " on" : ""}" data-cat="${c}" title="${c}">${n}</span>`).join("")
-  }</div>
+        <div class="chips" id="tcats">${ARXIV_CATS.map(catChip).join("")}</div>
+        <details class="cat-all"${allPicked ? " open" : ""}><summary>全部 arXiv 分类（${ARXIV_NAME.size} 个，按学科）</summary>${
+    ARXIV_ALL.map(([g, list]) => `<div class="cat-group"><h4>${g}</h4><div class="chips">${list.map(catChip).join("")}</div></div>`).join("")
+  }</details>
         <input type="text" id="tcat-extra" placeholder="其他分类代码，逗号分隔，如 cond-mat.supr-con" value="${
     esc(v.arxivCats.filter((c) => !known.has(c)).join(", "))
   }"></div>
@@ -953,10 +1046,10 @@ function openTopicEditor(t = null, preset = null, previewNow = false) {
     name: $("#tn").value.trim(),
     query: $("#tq").value,
     sources: chosenSources("tsrc"),
-    arxivCats: [
-      ...$$("#tcats .chip.on").map((c) => c.dataset.cat),
+    arxivCats: [...new Set([
+      ...$$(".dialog .chip.on[data-cat]").map((c) => c.dataset.cat),
       ...$("#tcat-extra").value.split(/[,，\s]+/).map((x) => x.trim()).filter(Boolean),
-    ],
+    ])],
     enabled: v.enabled !== false,
   });
 
@@ -1000,7 +1093,12 @@ function openTopicEditor(t = null, preset = null, previewNow = false) {
   modal.onclick = async (e) => {
     if (chipClick(e)) return;
     const chip = e.target.closest("[data-cat]");
-    if (chip) return chip.classList.toggle("on");
+    if (chip) {
+      // a category can show twice (common row and the full list): keep both in step
+      const on = !chip.classList.contains("on");
+      for (const c of $$(`[data-cat="${chip.dataset.cat}"]`, modal)) c.classList.toggle("on", on);
+      return;
+    }
     const b = e.target.closest("[data-m]");
     if (!b) return;
     if (b.dataset.m === "close") return closeModal();

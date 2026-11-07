@@ -5,3 +5,4 @@ site/
 .dev-scripts/
 .claude/
 *.log
+.dev-live-check.ts

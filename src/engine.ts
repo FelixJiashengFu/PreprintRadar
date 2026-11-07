@@ -182,7 +182,7 @@ export async function searchAll(params: SearchParams, profile: Profile | null) {
         offset: params.page * rows,
         sort: "relevance",
         author: params.field === "au",
-      });
+      }, query);
       found.push(...r.papers.filter((p) => evaluate(query, makeDoc(p))));
       if ((params.page + 1) * rows < r.total) hasMore = true;
     }

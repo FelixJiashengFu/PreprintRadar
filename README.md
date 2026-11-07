@@ -1,6 +1,6 @@
 # 预印本雷达 · PreprintRadar
 
-> 苟日新，日日新。—— 从 **arXiv、ChemRxiv、bioRxiv 等 12 个预印本平台**搜索最新论文，按你设定的时间自行推荐，勾选后一键导出 PDF。
+> 苟日新，日日新。—— 从 **arXiv、ChemRxiv、bioRxiv 等 28 个预印本平台与开放仓库**（理工、生命医学、地球、社科到文学历史哲学）搜索最新论文，按你设定的时间自行推荐，勾选后一键导出 PDF。
 
 **🌐 网页版（打开就能用）：<https://felixjiashengfu.github.io/PreprintRadar/>**　·　**💻 Windows 桌面版：[下载 PreprintRadar.exe](https://github.com/FelixJiashengFu/PreprintRadar/releases/latest)**
 
@@ -42,7 +42,7 @@
 
 | | 桌面版（Windows） | 网页版 |
 |---|---|---|
-| 搜索 12 个平台 | ✅ | ✅ |
+| 搜索 28 个平台 | ✅ | ✅ |
 | 兴趣主题、相关度排序、收藏 | ✅ | ✅（保存在你的浏览器里） |
 | 定时推荐 | 程序在托盘里就会运行，可开机自启 | 只在网页开着时运行，关掉后再打开会补上 |
 | 通知 | Windows 通知 | 浏览器通知 |
@@ -121,3 +121,8 @@ deno task icon     # 由 web/icon.svg 生成图标
 | `src/exporter.ts`、`src/templates.ts`、`src/pdftext.ts` | 桌面版 PDF：下载缓存、合并、目录页与书签 |
 | `src/web/` | 网页版：在浏览器里实现同一套 `/api/*`、localStorage 存储、浏览器内导出 |
 | `web/` | 界面（原生 JS，桌面版和网页版共用） |
+
+## 品牌 · Brand
+
+“预印本雷达 / PreprintRadar”名称与“雷达”朱印图标归 Jiasheng Fu 所有，保留所有权利；未经许可不得用于其他产品或服务。
+The PreprintRadar name and its vermilion seal icon belong to Jiasheng Fu; all rights reserved.

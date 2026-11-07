@@ -7,12 +7,16 @@
  * bioRxiv/medRxiv moved from DOI prefix 10.1101 to 10.64898 the same year.
  */
 import { fetchJson } from "../http.ts";
+import type { QNode } from "../query.ts";
 import { htmlishToText, squash } from "../text.ts";
-import type { Paper, Source } from "../types.ts";
+import type { Paper, RepoSource, Source } from "../types.ts";
+import { isRepoSource, repoSearch, repoWindow } from "./repository.ts";
 
 // deno-lint-ignore no-explicit-any
 type X = any;
+/** Every source but arXiv: Crossref servers, plus the DataCite repositories that crossrefWindow/crossrefSearch hand on. */
 export type CrossrefSource = Exclude<Source, "arxiv">;
+type CrossrefOnly = Exclude<CrossrefSource, RepoSource>;
 
 const API = "https://api.crossref.org/works";
 const SELECT = "DOI,title,author,abstract,created,posted,URL,link,resource,license,subject,group-title";
@@ -39,6 +43,17 @@ const byRe = (re: RegExp) => (doi: string): Ident | null => {
 };
 const linkWith = (links: string[], re: RegExp) => links.find((u) => re.test(u));
 
+/** The Center for Open Science's servers: 10.31235/osf.io/ur5y3_v1 (versioned since 2025) or 10.31235/osf.io/ur5y3. */
+export const parseOsfDoi = byRe(/osf\.io\/([a-z0-9]+)(?:_v(\d+))?$/i);
+const osfServer = (prefix: string): Def => ({
+  prefixes: [prefix],
+  accept: (doi) => /\/osf\.io\//i.test(doi),
+  ident: parseOsfDoi,
+  pdf: (_doi, id) => `https://osf.io/${id.base}/download`,
+});
+/** The landing page, for servers whose PDF only opens in a browser. */
+const landingOnly = (_doi: string, _id: Ident, links: string[], landing: string) => linkWith(links, /\.pdf($|\?)|\/download/i) ?? landing;
+
 /**
  * 10.26434/chemrxiv.15010776/v1   (2026–, Wiley)
  * 10.26434/chemrxiv-2023-ab12c-v2  (2021–2026, Cambridge Open Engage)
@@ -53,7 +68,7 @@ export function parseChemrxivDoi(doi: string): Ident | null {
 export const isMedrxivDoi = (doi: string) => /\.\d{8}$/.test(doi);
 const rxivIdent = byRe(/^10\.(?:64898|1101)\/(.+)$/i);
 
-export const DEFS: Record<CrossrefSource, Def> = {
+export const DEFS: Record<CrossrefOnly, Def> = {
   chemrxiv: {
     prefixes: ["10.26434"],
     ident: parseChemrxivDoi,
@@ -120,6 +135,58 @@ export const DEFS: Record<CrossrefSource, Def> = {
     ident: byRe(/^10\.31224\/([\w.-]+)$/i),
     pdf: (_doi, _id, _links, landing) => landing,
   },
+  // The Electrochemical Society's preprints, on OSF under the society's own prefix
+  ecsarxiv: osfServer("10.1149"),
+  osf: osfServer("10.31219"),
+  socarxiv: osfServer("10.31235"),
+  psyarxiv: osfServer("10.31234"),
+  edarxiv: osfServer("10.35542"),
+  metaarxiv: osfServer("10.31222"),
+  mediarxiv: osfServer("10.33767"),
+  paleorxiv: osfServer("10.31233"),
+  // 10.32388/ozjpoz.3 = version 3; the first version has no suffix
+  qeios: {
+    prefixes: ["10.32388"],
+    ident: byRe(/^10\.32388\/([a-z0-9]+)(?:\.(\d+))?$/i),
+    pdf: landingOnly,
+  },
+  // the same prefix carries SciELO's journal articles
+  scielo: {
+    prefixes: ["10.1590"],
+    accept: (doi) => /\/scielopreprints\./i.test(doi),
+    ident: byRe(/scielopreprints\.(\d+)$/i),
+    pdf: landingOnly,
+  },
+  // Cambridge Open Engage: APSA Preprints (apsa-…) and the other communities (coe-…); -v2 = version 2
+  engage: {
+    prefixes: ["10.33774"],
+    ident: byRe(/^10\.33774\/([a-z]+-\d{4}-[a-z0-9]+)(?:-v(\d+))?$/i),
+    pdf: landingOnly,
+    groupIsSubject: true,
+  },
+  // the same prefix carries JMIR's journal articles
+  jmir: {
+    prefixes: ["10.2196"],
+    accept: (doi) => /\/preprints\./i.test(doi),
+    ident: byRe(/preprints\.(\d+)$/i),
+    pdf: (_doi, id) => `https://preprints.jmir.org/preprint/${id.base}`,
+  },
+  sportrxiv: {
+    prefixes: ["10.51224"],
+    ident: byRe(/sportrxiv\.(\d+)(?:[./]v(\d+))?$/i),
+    pdf: landingOnly,
+  },
+  ecoevorxiv: {
+    prefixes: ["10.32942"],
+    ident: byRe(/^10\.32942\/([a-z0-9]+)(?:[./]v(\d+))?$/i),
+    pdf: landingOnly,
+    groupIsSubject: true,
+  },
+  agrirxiv: {
+    prefixes: ["10.31220"],
+    ident: byRe(/agrirxiv\.(\d{4}\.\d+)(?:[./]v(\d+))?$/i),
+    pdf: landingOnly,
+  },
 };
 
 function dateFromParts(d: X): string | null {
@@ -128,7 +195,7 @@ function dateFromParts(d: X): string | null {
   return new Date(Date.UTC(p[0], (p[1] ?? 1) - 1, p[2] ?? 1)).toISOString();
 }
 
-export function crossrefToPaper(source: CrossrefSource, it: X): Paper | null {
+export function crossrefToPaper(source: CrossrefOnly, it: X): Paper | null {
   const def = DEFS[source];
   const doi = String(it.DOI ?? "");
   if (def.accept && !def.accept(doi)) return null;
@@ -208,6 +275,7 @@ export async function crossrefWindow(
   since: Date,
   opts: { cap?: number; maxAgeMs?: number } = {},
 ): Promise<{ papers: Paper[]; truncated: boolean }> {
+  if (isRepoSource(source)) return await repoWindow(source, since, opts);
   const def = DEFS[source];
   const { items, truncated } = await prefixWindow(def.prefixes, isoDay(since), opts.cap ?? 6000, opts.maxAgeMs ?? 600_000);
   const byBase = new Map<string, Paper>();
@@ -223,7 +291,10 @@ export async function crossrefSearch(
   source: CrossrefSource,
   query: string,
   opts: { from?: Date; rows?: number; offset?: number; sort?: "relevance" | "date"; author?: boolean } = {},
+  /** the parsed query, for sources that need their own query syntax (DataCite) */
+  ast?: QNode,
 ): Promise<{ total: number; papers: Paper[] }> {
+  if (isRepoSource(source)) return await repoSearch(source, ast ?? null, opts);
   const def = DEFS[source];
   const params = new URLSearchParams({
     filter: filterFor(def.prefixes, opts.from ? [`from-created-date:${isoDay(opts.from)}`] : []),

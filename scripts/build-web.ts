@@ -30,7 +30,7 @@ Deno.copyFileSync(join(root, "docs", "feed.png"), join(site, "og.png"));
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 const title = `${APP_NAME} · arXiv / ChemRxiv / bioRxiv 等预印本搜索、定时推荐、一键导出 PDF`;
 const description =
-  "预印本雷达（PreprintRadar）：同时检索 arXiv、ChemRxiv、bioRxiv、medRxiv、Research Square、Preprints.org、SSRN 等 12 个预印本平台的最新论文，" +
+  "预印本雷达（PreprintRadar）：同时检索 arXiv、ChemRxiv、bioRxiv、medRxiv、Research Square、Preprints.org、SSRN、SocArXiv、PsyArXiv、Knowledge Commons 等 28 个预印本平台与开放仓库的最新论文（覆盖理工、医学、社科和人文），" +
   "按兴趣主题定时推荐，一键导出 PDF 合集。Search and get scheduled recommendations of the latest preprints from arXiv, ChemRxiv, bioRxiv and more.";
 const sourcesList = SOURCES.map((s) => `<li><b>${esc(s.name)}</b> — ${esc(s.field)}</li>`).join("");
 

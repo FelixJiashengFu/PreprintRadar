@@ -12,7 +12,7 @@ import { describe, parseQuery, QueryError } from "../query.ts";
 import { Profile } from "../rank.ts";
 import { computeNextRun } from "../schedule.ts";
 import { arxivViaDatacite } from "../sources/datacite.ts";
-import { DEFAULT_SOURCES, isSource, SOURCES } from "../sources/registry.ts";
+import { DEFAULT_SOURCES, isSource, SOURCE_GROUPS, SOURCES } from "../sources/registry.ts";
 import { plainTitle } from "../text.ts";
 import type { ExportMode, Paper, Topic } from "../types.ts";
 import { getWebJob, startWebExport, webJobs } from "./export.ts";
@@ -161,6 +161,7 @@ function state() {
     version: VERSION,
     web: true,
     sources: SOURCES,
+    sourceGroups: SOURCE_GROUPS,
     links: { repo: REPO_URL, web: WEB_URL, download: DOWNLOAD_URL },
     compiled: false,
     settings: store.settings,
